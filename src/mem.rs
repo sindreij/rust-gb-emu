@@ -15,6 +15,10 @@ impl Mmu {
         Ok(Mmu { mem })
     }
 
+    pub fn with_mem(mem: Vec<u8>) -> Mmu {
+        Mmu { mem }
+    }
+
     pub fn read_u8(&self, addr: u16) -> u8 {
         self.mem[addr as usize]
     }
