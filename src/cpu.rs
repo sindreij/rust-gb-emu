@@ -35,8 +35,26 @@ impl Cpu {
     }
 
     fn set_hl(&mut self, val: u16) {
-        self.l = (val & 0xff) as u8;
         self.h = (val >> 8) as u8;
+        self.l = (val & 0xff) as u8;
+    }
+
+    fn get_bc(&self) -> u16 {
+        ((self.b as u16) << 8) + (self.c as u16)
+    }
+
+    fn set_bc(&mut self, val: u16) {
+        self.b = (val >> 8) as u8;
+        self.c = (val & 0xff) as u8;
+    }
+
+    fn get_de(&self) -> u16 {
+        ((self.d as u16) << 8) + (self.e as u16)
+    }
+
+    fn set_de(&mut self, val: u16) {
+        self.d = (val >> 8) as u8;
+        self.e = (val & 0xff) as u8;
     }
 
     fn get_loc8(&mut self, loc: Loc8, mmu: &Mmu) -> u8 {
@@ -51,12 +69,22 @@ impl Cpu {
             L => self.l,
             // (HL)
             IndHL => mmu.read_u8(self.get_hl()),
+            IndBC => mmu.read_u8(self.get_bc()),
+            IndDE => mmu.read_u8(self.get_de()),
             // (HL-)
             IndHLDec => {
                 let hl = self.get_hl();
                 self.set_hl(hl - 1);
                 mmu.read_u8(hl)
             }
+            IndHLInc => {
+                let hl = self.get_hl();
+                self.set_hl(hl + 1);
+                mmu.read_u8(hl)
+            }
+            IOPlusC => mmu.read_u8(0xff00 + (self.c as u16)),
+            IOPlus(pos) => mmu.read_u8(0xff00 + (pos as u16)),
+            U8(val) => val,
         }
     }
 
@@ -71,18 +99,30 @@ impl Cpu {
             Loc8::L => self.l = val,
             // (HL)
             Loc8::IndHL => mmu.write_u8(self.get_hl(), val),
+            Loc8::IndBC => mmu.write_u8(self.get_bc(), val),
+            Loc8::IndDE => mmu.write_u8(self.get_de(), val),
             // (HL-)
             Loc8::IndHLDec => {
                 let hl = self.get_hl();
                 self.set_hl(hl - 1);
                 mmu.write_u8(hl, val);
             }
+            Loc8::IndHLInc => {
+                let hl = self.get_hl();
+                self.set_hl(hl + 1);
+                mmu.write_u8(hl, val);
+            }
+            Loc8::IOPlusC => mmu.write_u8(0xff00 + (self.c as u16), val),
+            Loc8::IOPlus(pos) => mmu.write_u8(0xff00 + (pos as u16), val),
+            Loc8::U8(_) => panic!("Invalid write to a const u8 value"),
         }
     }
 
     fn get_loc16(&self, loc: Loc16) -> u16 {
         match loc {
             Loc16::HL => self.get_hl(),
+            Loc16::BC => self.get_bc(),
+            Loc16::DE => self.get_de(),
             Loc16::SP => self.sp,
             Loc16::U16(val) => val,
         }
@@ -91,8 +131,10 @@ impl Cpu {
     fn set_loc16(&mut self, loc: Loc16, val: u16) {
         match loc {
             Loc16::HL => self.set_hl(val),
+            Loc16::BC => self.set_bc(val),
+            Loc16::DE => self.set_de(val),
             Loc16::SP => self.sp = val,
-            Loc16::U16(_) => panic!("Can't set a u16 location"),
+            Loc16::U16(_) => panic!("Invalid write to a const u16 value"),
         }
     }
 
@@ -120,6 +162,10 @@ impl Cpu {
             Load16 { src, dst } => {
                 let val = self.get_loc16(src);
                 self.set_loc16(dst, val);
+            }
+            Inc8 { loc } => {
+                let val = self.get_loc8(loc, mmu);
+                self.set_loc8(loc, mmu, val + 1);
             }
             XOR { src, dst } => {
                 let srcval = self.get_loc8(src, mmu);
