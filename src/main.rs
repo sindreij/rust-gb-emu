@@ -6,6 +6,7 @@ use std::error::Error;
 
 use structopt::StructOpt;
 
+use cpu::Cpu;
 use instructions::Instruction;
 use mem::Mmu;
 
@@ -15,6 +16,8 @@ use mem::Mmu;
 enum Opt {
     #[structopt(name = "disassemble_bootrom")]
     DisassembleBootrom,
+    #[structopt(name = "run")]
+    Run,
 }
 
 fn main() -> Result<(), Box<Error>> {
@@ -22,6 +25,16 @@ fn main() -> Result<(), Box<Error>> {
 
     match matches {
         Opt::DisassembleBootrom => disassemble_bootrom(),
+        Opt::Run => run(),
+    }
+}
+
+fn run() -> Result<(), Box<Error>> {
+    let mut mmu = Mmu::init()?;
+    let mut cpu = Cpu::default();
+
+    loop {
+        cpu.step(&mut mmu);
     }
 }
 
