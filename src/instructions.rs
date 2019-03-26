@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::error::Error;
 use crate::mem::Mmu;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -10,6 +11,7 @@ pub enum Instruction {
     CheckBit { bit: u8, loc: Loc8 },
     JR { cond: Cond, offset: i8 },
     Inc8 { loc: Loc8 },
+    Call { cond: Cond, addr: u16 },
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -56,131 +58,131 @@ pub enum Loc16 {
 
 impl Instruction {
     // Returns the instruction and the number of bytes read
-    pub fn parse(pc: u16, mmu: &Mmu) -> (Instruction, u16) {
-        match mmu.read_u8(pc) {
-            0x01 => (
+    pub fn parse(pc: u16, mmu: &Mmu) -> Result<(Instruction, u16), Error> {
+        match mmu.read_u8(pc)? {
+            0x01 => Ok((
                 Instruction::Load16 {
-                    src: Loc16::U16(mmu.read_u16(pc + 1)),
+                    src: Loc16::U16(mmu.read_u16(pc + 1)?),
                     dst: Loc16::BC,
                 },
                 3,
-            ),
-            0x0a => (
+            )),
+            0x0a => Ok((
                 Instruction::Load8 {
                     src: Loc8::IndBC,
                     dst: Loc8::A,
                 },
                 1,
-            ),
-            0x0c => (Instruction::Inc8 { loc: Loc8::C }, 1),
-            0x0e => (
+            )),
+            0x0c => Ok((Instruction::Inc8 { loc: Loc8::C }, 1)),
+            0x0e => Ok((
                 Instruction::Load8 {
-                    src: Loc8::U8(mmu.read_u8(pc + 1)),
+                    src: Loc8::U8(mmu.read_u8(pc + 1)?),
                     dst: Loc8::C,
                 },
                 2,
-            ),
-            0x11 => (
+            )),
+            0x11 => Ok((
                 Instruction::Load16 {
-                    src: Loc16::U16(mmu.read_u16(pc + 1)),
+                    src: Loc16::U16(mmu.read_u16(pc + 1)?),
                     dst: Loc16::DE,
                 },
                 3,
-            ),
-            0x18 => (
+            )),
+            0x18 => Ok((
                 Instruction::JR {
                     cond: Cond::Always,
-                    offset: mmu.read_i8(pc + 1),
+                    offset: mmu.read_i8(pc + 1)?,
                 },
                 2,
-            ),
-            0x1a => (
+            )),
+            0x1a => Ok((
                 Instruction::Load8 {
                     src: Loc8::IndDE,
                     dst: Loc8::A,
                 },
                 1,
-            ),
-            0x1c => (Instruction::Inc8 { loc: Loc8::E }, 1),
-            0x1e => (
+            )),
+            0x1c => Ok((Instruction::Inc8 { loc: Loc8::E }, 1)),
+            0x1e => Ok((
                 Instruction::Load8 {
-                    src: Loc8::U8(mmu.read_u8(pc + 1)),
+                    src: Loc8::U8(mmu.read_u8(pc + 1)?),
                     dst: Loc8::E,
                 },
                 2,
-            ),
-            0x20 => (
+            )),
+            0x20 => Ok((
                 Instruction::JR {
                     cond: Cond::NotZero,
-                    offset: mmu.read_i8(pc + 1),
+                    offset: mmu.read_i8(pc + 1)?,
                 },
                 2,
-            ),
-            0x21 => (
+            )),
+            0x21 => Ok((
                 Instruction::Load16 {
-                    src: Loc16::U16(mmu.read_u16(pc + 1)),
+                    src: Loc16::U16(mmu.read_u16(pc + 1)?),
                     dst: Loc16::HL,
                 },
                 3,
-            ),
-            0x28 => (
+            )),
+            0x28 => Ok((
                 Instruction::JR {
                     cond: Cond::Zero,
-                    offset: mmu.read_i8(pc + 1),
+                    offset: mmu.read_i8(pc + 1)?,
                 },
                 2,
-            ),
-            0x2a => (
+            )),
+            0x2a => Ok((
                 Instruction::Load8 {
                     src: Loc8::IndHLInc,
                     dst: Loc8::A,
                 },
                 1,
-            ),
-            0x2c => (Instruction::Inc8 { loc: Loc8::L }, 1),
-            0x2e => (
+            )),
+            0x2c => Ok((Instruction::Inc8 { loc: Loc8::L }, 1)),
+            0x2e => Ok((
                 Instruction::Load8 {
-                    src: Loc8::U8(mmu.read_u8(pc + 1)),
+                    src: Loc8::U8(mmu.read_u8(pc + 1)?),
                     dst: Loc8::L,
                 },
                 2,
-            ),
-            0x30 => (
+            )),
+            0x30 => Ok((
                 Instruction::JR {
                     cond: Cond::NotCarry,
-                    offset: mmu.read_i8(pc + 1),
+                    offset: mmu.read_i8(pc + 1)?,
                 },
                 2,
-            ),
-            0x31 => (
+            )),
+            0x31 => Ok((
                 Instruction::Load16 {
-                    src: Loc16::U16(mmu.read_u16(pc + 1)),
+                    src: Loc16::U16(mmu.read_u16(pc + 1)?),
                     dst: Loc16::SP,
                 },
                 3,
-            ),
-            0x32 => (
+            )),
+            0x32 => Ok((
                 Instruction::Load8 {
                     src: Loc8::A,
                     dst: Loc8::IndHLDec,
                 },
                 1,
-            ),
-            0x38 => (
+            )),
+            0x38 => Ok((
                 Instruction::JR {
                     cond: Cond::Carry,
-                    offset: mmu.read_i8(pc + 1),
+                    offset: mmu.read_i8(pc + 1)?,
                 },
                 2,
-            ),
-            0x3a => (
+            )),
+            0x3a => Ok((
                 Instruction::Load8 {
                     src: Loc8::IndHLDec,
                     dst: Loc8::A,
                 },
                 1,
-            ),
-            0x76 => panic!("TODO, HALT"),
+            )),
+            0x76 => Err(Error::TODOHalt),
             inst @ 0x40...0x7f => {
                 let high5 = inst & 0b11111000;
                 let low3 = inst & 0x07;
@@ -207,40 +209,47 @@ impl Instruction {
                     aaa => panic!("This should not be possible (high5, 76) ({:02x})", aaa),
                 };
 
-                (Instruction::Load8 { src, dst }, 1)
+                Ok((Instruction::Load8 { src, dst }, 1))
             }
-            0x3c => (Instruction::Inc8 { loc: Loc8::A }, 1),
-            0x3e => (
+            0x3c => Ok((Instruction::Inc8 { loc: Loc8::A }, 1)),
+            0x3e => Ok((
                 Instruction::Load8 {
-                    src: Loc8::U8(mmu.read_u8(pc + 1)),
+                    src: Loc8::U8(mmu.read_u8(pc + 1)?),
                     dst: Loc8::A,
                 },
                 2,
-            ),
-            0xaf => (
+            )),
+            0xaf => Ok((
                 Instruction::XOR {
                     src: Loc8::A,
                     dst: Loc8::A,
                 },
                 1,
-            ),
-            0xe0 => (
+            )),
+            0xcd => Ok((
+                Instruction::Call {
+                    cond: Cond::Always,
+                    addr: mmu.read_u16(pc + 1)?,
+                },
+                3,
+            )),
+            0xe0 => Ok((
                 Instruction::Load8 {
                     src: Loc8::A,
-                    dst: Loc8::IOPlus(mmu.read_u8(pc + 1)),
+                    dst: Loc8::IOPlus(mmu.read_u8(pc + 1)?),
                 },
                 2,
-            ),
-            0xe2 => (
+            )),
+            0xe2 => Ok((
                 Instruction::Load8 {
                     src: Loc8::A,
                     dst: Loc8::IOPlusC,
                 },
                 1,
-            ),
+            )),
             // CB Prefix
             0xcb => {
-                let inst = mmu.read_u8(pc + 1);
+                let inst = mmu.read_u8(pc + 1)?;
                 let high5 = inst & 0b11111000;
                 let low3 = inst & 0x07;
                 use Loc8::*;
@@ -256,20 +265,20 @@ impl Instruction {
                 };
 
                 let res = match high5 {
-                    0x40 => Instruction::CheckBit { bit: 0, loc },
-                    0x48 => Instruction::CheckBit { bit: 1, loc },
-                    0x50 => Instruction::CheckBit { bit: 2, loc },
-                    0x58 => Instruction::CheckBit { bit: 3, loc },
-                    0x60 => Instruction::CheckBit { bit: 4, loc },
-                    0x68 => Instruction::CheckBit { bit: 5, loc },
-                    0x70 => Instruction::CheckBit { bit: 6, loc },
-                    0x78 => Instruction::CheckBit { bit: 7, loc },
-                    _ => panic!("Unknow instruction `cb {:02x}`", inst),
-                };
+                    0x40 => Ok(Instruction::CheckBit { bit: 0, loc }),
+                    0x48 => Ok(Instruction::CheckBit { bit: 1, loc }),
+                    0x50 => Ok(Instruction::CheckBit { bit: 2, loc }),
+                    0x58 => Ok(Instruction::CheckBit { bit: 3, loc }),
+                    0x60 => Ok(Instruction::CheckBit { bit: 4, loc }),
+                    0x68 => Ok(Instruction::CheckBit { bit: 5, loc }),
+                    0x70 => Ok(Instruction::CheckBit { bit: 6, loc }),
+                    0x78 => Ok(Instruction::CheckBit { bit: 7, loc }),
+                    _ => Err(Error::UnknownCbInstruction(inst)),
+                }?;
 
-                (res, 2)
+                Ok((res, 2))
             }
-            unknown => panic!("Unknown instruction `{:02x}`", unknown),
+            unknown => Err(Error::UnknownInstruction(unknown)),
         }
     }
 }
@@ -283,7 +292,8 @@ impl fmt::Display for Instruction {
             XOR { dst, src } => write!(f, "XOR {},{}", dst, src),
             Inc8 { loc } => write!(f, "INC {}", loc),
             CheckBit { bit, loc } => write!(f, "BIT {},{}", bit, loc),
-            JR { cond, offset } => write!(f, "JR {}${:x}", cond, offset),
+            JR { cond, offset } => write!(f, "JR {}${:02x}", cond, offset),
+            Call { cond, addr } => write!(f, "CALL {}${:04x}", cond, addr),
         }
     }
 }

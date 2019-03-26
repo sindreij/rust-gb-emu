@@ -1,26 +1,47 @@
-use std::error::Error;
 use std::fs::File;
 use std::io::prelude::*;
+
+use crate::error::Error;
 
 pub struct Mmu {
     mem: Vec<u8>,
 }
 
 impl Mmu {
-    pub fn init() -> Result<Mmu, Box<Error>> {
-        let mut boot_rom_file = File::open("roms/DMG_ROM.bin")?;
-        let mut mem = vec![0; 65535];
+    pub fn empty() -> Mmu {
+        let mem = vec![0; 65535];
+        Mmu { mem }
+    }
 
+    pub fn load_game_rom(&mut self, rom_file: &str) -> Result<(), Error> {
+        let mut game_rom_file = File::open(rom_file)?;
+        let mut game_rom = Vec::new();
+        game_rom_file.read_to_end(&mut game_rom)?;
+        assert_eq!(game_rom.len(), 0x8000);
+        // TODO: We need to save the first 256 bytes and put that in when the booting is finished
+        // The first 256 bytes will be overwritten when the boot rom is loaded
+        let (left, _) = self.mem.split_at_mut(0x8000);
+        left.copy_from_slice(&game_rom);
+
+        Ok(())
+    }
+
+    pub fn load_boot_rom(&mut self) -> Result<(), Error> {
+        let mut boot_rom_file = File::open("roms/DMG_ROM.bin")?;
         let mut boot_rom = Vec::new();
         boot_rom_file.read_to_end(&mut boot_rom)?;
         assert_eq!(boot_rom.len(), 256);
 
-        {
-            let (left, _) = mem.split_at_mut(256);
-            left.copy_from_slice(&boot_rom);
-        }
+        let (left, _) = self.mem.split_at_mut(256);
+        left.copy_from_slice(&boot_rom);
 
-        Ok(Mmu { mem })
+        Ok(())
+    }
+
+    pub fn dump_to_file(&self, filename: &str) -> Result<(), Error> {
+        let mut file = File::create(filename)?;
+        file.write_all(&self.mem)?;
+        Ok(())
     }
 
     #[cfg(test)]
@@ -28,22 +49,41 @@ impl Mmu {
         Mmu { mem }
     }
 
-    pub fn read_u8(&self, addr: u16) -> u8 {
-        self.mem[addr as usize]
+    pub fn read_u8(&self, addr: u16) -> Result<u8, Error> {
+        self.mem
+            .get(addr as usize)
+            .cloned()
+            .ok_or(Error::InvalidReadFromMemoryLocation(addr))
     }
 
-    pub fn write_u8(&mut self, addr: u16, val: u8) {
-        self.mem[addr as usize] = val;
+    pub fn write_u8(&mut self, addr: u16, val: u8) -> Result<(), Error> {
+        let location = self
+            .mem
+            .get_mut(addr as usize)
+            .ok_or(Error::InvalidWriteToMemoryLocation(addr))?;
+
+        *location = val;
+
+        Ok(())
     }
 
-    pub fn read_i8(&self, addr: u16) -> i8 {
-        self.read_u8(addr) as i8
+    pub fn write_u16(&mut self, addr: u16, val: u16) -> Result<(), Error> {
+        let high = (val >> 8) as u8;
+        let low = (val & 0xff) as u8;
+        self.write_u8(addr + 1, high)?;
+        self.write_u8(addr, low)?;
+
+        Ok(())
     }
 
-    pub fn read_u16(&self, addr: u16) -> u16 {
-        let first = self.read_u8(addr);
-        let second = self.read_u8(addr + 1);
+    pub fn read_i8(&self, addr: u16) -> Result<i8, Error> {
+        Ok(self.read_u8(addr)? as i8)
+    }
 
-        (first as u16) + ((second as u16) << 8)
+    pub fn read_u16(&self, addr: u16) -> Result<u16, Error> {
+        let first = self.read_u8(addr)?;
+        let second = self.read_u8(addr + 1)?;
+
+        Ok((first as u16) + ((second as u16) << 8))
     }
 }
