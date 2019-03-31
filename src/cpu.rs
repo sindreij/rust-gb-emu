@@ -108,6 +108,7 @@ impl Cpu {
             IOPlusC => mmu.read_u8(0xff00 + (self.c as u16))?,
             IOPlus(pos) => mmu.read_u8(0xff00 + (pos as u16))?,
             U8(val) => val,
+            IndU16(addr) => mmu.read_u8(addr)?,
         };
 
         Ok(res)
@@ -139,6 +140,7 @@ impl Cpu {
             }
             Loc8::IOPlusC => mmu.write_u8(0xff00 + (self.c as u16), val)?,
             Loc8::IOPlus(pos) => mmu.write_u8(0xff00 + (pos as u16), val)?,
+            Loc8::IndU16(addr) => mmu.write_u8(addr, val)?,
             Loc8::U8(_) => panic!("Invalid write to a const u8 value"),
         }
 
@@ -200,16 +202,48 @@ impl Cpu {
             }
             Dec8 { loc } => {
                 let val = self.get_loc8(loc, mmu)?;
-                self.set_loc8(loc, mmu, val.wrapping_sub(1))?;
+                let result = val.wrapping_sub(1);
+                self.set_loc8(loc, mmu, result)?;
                 self.flags.zero = val == 0;
                 self.flags.subtract = true;
-                self.flags.half_carry = val & 0xff == 0xff;
+                // set if no borrow from bit 4
+                self.flags.half_carry = result & 0xff != 0xff;
+            }
+            AddA { src } => {
+                let dst = self.a as u16;
+                let src = self.get_loc8(src, mmu)? as u16;
+                let result = src + dst;
+                self.a = result as u8;
+                self.flags.zero = result == 0;
+                self.flags.subtract = false;
+                self.flags.half_carry = (((src & 0xf) + (dst & 0xf)) & 0x10) == 0x10;
+                self.flags.carry = result & 0x100 == 0x100;
             }
             XOR { src, dst } => {
                 let srcval = self.get_loc8(src, mmu)?;
                 let dstval = self.get_loc8(dst, mmu)?;
                 let res = srcval ^ dstval;
                 self.set_loc8(dst, mmu, res)?;
+            }
+            Sub { src } => {
+                let src_val = self.get_loc8(src, mmu)?;
+                let result = self.a.wrapping_sub(src_val);
+                self.flags.zero = result == 0;
+                self.flags.subtract = true;
+                // TODO: set if no borrow from bit 4
+                // self.flags.half_carry =
+                self.flags.carry = self.a < src_val;
+            }
+            Compare { loc } => {
+                // Compare A with n. This is basically an A - n subtraction
+                // instruction, but the result are thrown away.
+                let val1 = self.get_loc8(loc, mmu)?;
+                let result = self.a.wrapping_sub(val1);
+                self.flags.zero = result == 0;
+                self.flags.subtract = true;
+                // TODO: set if no borrow from bit 4
+                // self.flags.half_carry =
+                self.flags.carry = self.a < val1;
             }
             CheckBit { bit, loc } => {
                 let mask = 1 << bit;
@@ -248,6 +282,13 @@ impl Cpu {
                 if self.check_cond(cond) {
                     mmu.write_u16(self.sp - 1, self.pc)?;
                     self.sp -= 2;
+                    self.pc = addr;
+                }
+            }
+            Return { cond } => {
+                if self.check_cond(cond) {
+                    self.sp += 2;
+                    let addr = mmu.read_u16(self.sp - 1)?;
                     self.pc = addr;
                 }
             }

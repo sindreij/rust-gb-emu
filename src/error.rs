@@ -8,6 +8,7 @@ pub enum Error {
     InvalidReadFromMemoryLocation(u16),
     InvalidWriteToMemoryLocation(u16),
     TODOHalt,
+    Abort(&'static str),
 }
 
 impl fmt::Display for Error {
@@ -23,6 +24,7 @@ impl fmt::Display for Error {
             }
             Error::TODOHalt => write!(f, "TODO HALT"),
             Error::IoError(original) => write!(f, "IO Error: {}", original),
+            Error::Abort(msg) => write!(f, "Aborting, {}", msg),
         }
     }
 }

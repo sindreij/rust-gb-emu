@@ -9,7 +9,9 @@ pub struct Mmu {
 
 impl Mmu {
     pub fn empty() -> Mmu {
-        let mem = vec![0; 65535];
+        let mut mem = vec![0; 65535];
+        // Simulate always beeing in vblank :)
+        mem[0xff44] = 0x90;
         Mmu { mem }
     }
 
@@ -39,6 +41,7 @@ impl Mmu {
     }
 
     pub fn dump_to_file(&self, filename: &str) -> Result<(), Error> {
+        // TODO: Use read_u8 to read IO registers correctly
         let mut file = File::create(filename)?;
         file.write_all(&self.mem)?;
         Ok(())
@@ -49,14 +52,14 @@ impl Mmu {
         Mmu { mem }
     }
 
-    pub fn read_u8(&self, addr: u16) -> Result<u8, Error> {
+    fn read_ram(&self, addr: u16) -> Result<u8, Error> {
         self.mem
             .get(addr as usize)
             .cloned()
             .ok_or(Error::InvalidReadFromMemoryLocation(addr))
     }
 
-    pub fn write_u8(&mut self, addr: u16, val: u8) -> Result<(), Error> {
+    fn write_ram(&mut self, addr: u16, val: u8) -> Result<(), Error> {
         let location = self
             .mem
             .get_mut(addr as usize)
@@ -65,6 +68,28 @@ impl Mmu {
         *location = val;
 
         Ok(())
+    }
+
+    fn write_io_register(&mut self, addr: u16, val: u8) -> Result<(), Error> {
+        if addr == 0xff50 {
+            // TODO: Turn off bootrom
+            return Err(Error::Abort("Bootrom finished, aborting for now"));
+        }
+        // Also write to ram for easier debugging and to make read and write work for now
+        self.write_ram(addr, val)?;
+        Ok(())
+    }
+
+    pub fn read_u8(&self, addr: u16) -> Result<u8, Error> {
+        self.read_ram(addr)
+    }
+
+    pub fn write_u8(&mut self, addr: u16, val: u8) -> Result<(), Error> {
+        match addr {
+            // IO
+            0x0000...0xfeff => self.write_ram(addr, val),
+            0xff00...0xffff => self.write_io_register(addr, val),
+        }
     }
 
     pub fn write_u16(&mut self, addr: u16, val: u16) -> Result<(), Error> {

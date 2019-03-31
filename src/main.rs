@@ -1,13 +1,17 @@
 mod cpu;
+mod debugger;
 mod error;
 mod instructions;
 mod mem;
 
 use std::error::Error;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use structopt::StructOpt;
 
 use cpu::Cpu;
+use debugger::Debugger;
 use instructions::Instruction;
 use mem::Mmu;
 
@@ -19,6 +23,8 @@ enum Opt {
     DisassembleBootrom,
     #[structopt(name = "run")]
     Run { rom_file: String },
+    #[structopt(name = "debug")]
+    Debug { rom_file: String },
 }
 
 fn main() {
@@ -33,7 +39,19 @@ fn main_() -> Result<(), Box<Error>> {
     match matches {
         Opt::DisassembleBootrom => disassemble_bootrom(),
         Opt::Run { rom_file } => run(&rom_file),
+        Opt::Debug { rom_file } => debug(&rom_file),
     }
+}
+
+fn debug(rom_file: &str) -> Result<(), Box<Error>> {
+    let mut mmu = Mmu::empty();
+    mmu.load_game_rom(rom_file)?;
+    mmu.load_boot_rom()?;
+    let cpu = Cpu::default();
+
+    Debugger::new(mmu, cpu).run()?;
+
+    Ok(())
 }
 
 fn run(rom_file: &str) -> Result<(), Box<Error>> {
@@ -55,8 +73,20 @@ fn run(rom_file: &str) -> Result<(), Box<Error>> {
 }
 
 fn game_loop(cpu: &mut Cpu, mmu: &mut Mmu) -> Result<(), Box<Error>> {
+    let interrupt = Arc::new(AtomicBool::new(false));
+    ctrlc::set_handler({
+        let interrupt = interrupt.clone();
+        move || {
+            interrupt.store(true, Ordering::Relaxed);
+        }
+    })?;
+
     loop {
         cpu.step(mmu)?;
+
+        if interrupt.load(Ordering::Relaxed) {
+            return Err(crate::error::Error::Abort("Interrupt").into());
+        }
     }
 }
 
@@ -67,9 +97,21 @@ fn disassemble_bootrom() -> Result<(), Box<Error>> {
 
     let mut pc = 0;
 
-    loop {
+    while pc < 0x100 {
+        if pc > 0xa7 && pc < 0xe0 {
+            // DATA
+            print!("{:02x} ", mmu.read_u8(pc)?);
+            if pc == 0xdf {
+                println!("");
+            }
+            pc += 1;
+            continue;
+        }
+
         let (inst, delta) = Instruction::parse(pc, &mmu)?;
         println!("{:04x}    {}", pc, inst);
         pc += delta;
     }
+
+    Ok(())
 }
