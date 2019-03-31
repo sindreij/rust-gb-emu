@@ -82,6 +82,7 @@ fn game_loop(cpu: &mut Cpu, mmu: &mut Mmu) -> Result<(), Box<Error>> {
     })?;
 
     loop {
+        cpu.print_next(mmu)?;
         cpu.step(mmu)?;
 
         if interrupt.load(Ordering::Relaxed) {

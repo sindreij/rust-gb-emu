@@ -8,16 +8,16 @@ use crate::{
 
 #[derive(Default, Debug)]
 pub struct Cpu {
-    sp: u16,
-    pc: u16,
-    a: u8,
-    b: u8,
-    c: u8,
-    d: u8,
-    e: u8,
-    h: u8,
-    l: u8,
-    flags: Flags,
+    pub sp: u16,
+    pub pc: u16,
+    pub a: u8,
+    pub b: u8,
+    pub c: u8,
+    pub d: u8,
+    pub e: u8,
+    pub h: u8,
+    pub l: u8,
+    pub flags: Flags,
 }
 
 #[derive(Default, Debug)]
@@ -53,7 +53,7 @@ impl fmt::Display for Cpu {
 }
 
 impl Cpu {
-    fn get_hl(&self) -> u16 {
+    pub fn get_hl(&self) -> u16 {
         ((self.h as u16) << 8) + (self.l as u16)
     }
 
@@ -62,7 +62,7 @@ impl Cpu {
         self.l = (val & 0xff) as u8;
     }
 
-    fn get_bc(&self) -> u16 {
+    pub fn get_bc(&self) -> u16 {
         ((self.b as u16) << 8) + (self.c as u16)
     }
 
@@ -71,7 +71,7 @@ impl Cpu {
         self.c = (val & 0xff) as u8;
     }
 
-    fn get_de(&self) -> u16 {
+    pub fn get_de(&self) -> u16 {
         ((self.d as u16) << 8) + (self.e as u16)
     }
 
@@ -177,9 +177,14 @@ impl Cpu {
         }
     }
 
+    pub fn print_next(&self, mmu: &Mmu) -> Result<(), Error> {
+        let (inst, _) = Instruction::parse(self.pc, &mmu)?;
+        println!("{:04x}    {}", self.pc, inst);
+        Ok(())
+    }
+
     pub fn step(&mut self, mmu: &mut Mmu) -> Result<(), Error> {
         let (inst, delta) = Instruction::parse(self.pc, &mmu)?;
-        println!("{:04x}    {}", self.pc, inst);
         self.pc += delta;
 
         use Instruction::*;
@@ -204,7 +209,7 @@ impl Cpu {
                 let val = self.get_loc8(loc, mmu)?;
                 let result = val.wrapping_sub(1);
                 self.set_loc8(loc, mmu, result)?;
-                self.flags.zero = val == 0;
+                self.flags.zero = result == 0;
                 self.flags.subtract = true;
                 // set if no borrow from bit 4
                 self.flags.half_carry = result & 0xff != 0xff;
@@ -214,7 +219,7 @@ impl Cpu {
                 let src = self.get_loc8(src, mmu)? as u16;
                 let result = src + dst;
                 self.a = result as u8;
-                self.flags.zero = result == 0;
+                self.flags.zero = self.a == 0;
                 self.flags.subtract = false;
                 self.flags.half_carry = (((src & 0xf) + (dst & 0xf)) & 0x10) == 0x10;
                 self.flags.carry = result & 0x100 == 0x100;
