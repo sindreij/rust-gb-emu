@@ -9,9 +9,16 @@ pub enum Instruction {
     Load16 { src: Loc16, dst: Loc16 },
     XOR { src: Loc8, dst: Loc8 },
     CheckBit { bit: u8, loc: Loc8 },
+    RotateLeftCarry { loc: Loc8 },
+    RotateLeft { loc: Loc8 },
     JR { cond: Cond, offset: i8 },
     Inc8 { loc: Loc8 },
+    Inc16 { loc: Loc16 },
+    Dec8 { loc: Loc8 },
     Call { cond: Cond, addr: u16 },
+    Return { cond: Cond },
+    Push { loc: Loc16 },
+    Pop { loc: Loc16 },
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -67,6 +74,22 @@ impl Instruction {
                 },
                 3,
             )),
+            0x02 => Ok((
+                Instruction::Load8 {
+                    src: Loc8::A,
+                    dst: Loc8::IndBC,
+                },
+                1,
+            )),
+            0x03 => Ok((Instruction::Inc16 { loc: Loc16::BC }, 1)),
+            0x05 => Ok((Instruction::Dec8 { loc: Loc8::B }, 1)),
+            0x06 => Ok((
+                Instruction::Load8 {
+                    src: Loc8::U8(mmu.read_u8(pc + 1)?),
+                    dst: Loc8::B,
+                },
+                2,
+            )),
             0x0a => Ok((
                 Instruction::Load8 {
                     src: Loc8::IndBC,
@@ -89,6 +112,23 @@ impl Instruction {
                 },
                 3,
             )),
+            0x12 => Ok((
+                Instruction::Load8 {
+                    src: Loc8::A,
+                    dst: Loc8::IndDE,
+                },
+                1,
+            )),
+            0x13 => Ok((Instruction::Inc16 { loc: Loc16::DE }, 1)),
+            0x15 => Ok((Instruction::Dec8 { loc: Loc8::D }, 1)),
+            0x16 => Ok((
+                Instruction::Load8 {
+                    src: Loc8::U8(mmu.read_u8(pc + 1)?),
+                    dst: Loc8::D,
+                },
+                2,
+            )),
+            0x17 => Ok((Instruction::RotateLeft { loc: Loc8::A }, 1)),
             0x18 => Ok((
                 Instruction::JR {
                     cond: Cond::Always,
@@ -96,6 +136,7 @@ impl Instruction {
                 },
                 2,
             )),
+
             0x1a => Ok((
                 Instruction::Load8 {
                     src: Loc8::IndDE,
@@ -124,6 +165,22 @@ impl Instruction {
                     dst: Loc16::HL,
                 },
                 3,
+            )),
+            0x22 => Ok((
+                Instruction::Load8 {
+                    src: Loc8::A,
+                    dst: Loc8::IndHLInc,
+                },
+                1,
+            )),
+            0x23 => Ok((Instruction::Inc16 { loc: Loc16::HL }, 1)),
+            0x25 => Ok((Instruction::Dec8 { loc: Loc8::H }, 1)),
+            0x26 => Ok((
+                Instruction::Load8 {
+                    src: Loc8::U8(mmu.read_u8(pc + 1)?),
+                    dst: Loc8::H,
+                },
+                2,
             )),
             0x28 => Ok((
                 Instruction::JR {
@@ -167,6 +224,15 @@ impl Instruction {
                     dst: Loc8::IndHLDec,
                 },
                 1,
+            )),
+            0x33 => Ok((Instruction::Inc16 { loc: Loc16::SP }, 1)),
+            0x35 => Ok((Instruction::Dec8 { loc: Loc8::IndHL }, 1)),
+            0x36 => Ok((
+                Instruction::Load8 {
+                    src: Loc8::U8(mmu.read_u8(pc + 1)?),
+                    dst: Loc8::IndHL,
+                },
+                2,
             )),
             0x38 => Ok((
                 Instruction::JR {
@@ -226,6 +292,8 @@ impl Instruction {
                 },
                 1,
             )),
+            0xc1 => Ok((Instruction::Pop { loc: Loc16::BC }, 1)),
+            0xc5 => Ok((Instruction::Push { loc: Loc16::BC }, 1)),
             0xcd => Ok((
                 Instruction::Call {
                     cond: Cond::Always,
@@ -233,6 +301,8 @@ impl Instruction {
                 },
                 3,
             )),
+            0xd1 => Ok((Instruction::Pop { loc: Loc16::DE }, 1)),
+            0xd5 => Ok((Instruction::Push { loc: Loc16::DE }, 1)),
             0xe0 => Ok((
                 Instruction::Load8 {
                     src: Loc8::A,
@@ -247,6 +317,9 @@ impl Instruction {
                 },
                 1,
             )),
+            0xe1 => Ok((Instruction::Pop { loc: Loc16::HL }, 1)),
+            0xe5 => Ok((Instruction::Push { loc: Loc16::HL }, 1)),
+            // 0xf5 => Ok((Instruction::Push { loc: Loc16::AF }, 1)),
             // CB Prefix
             0xcb => {
                 let inst = mmu.read_u8(pc + 1)?;
@@ -265,6 +338,8 @@ impl Instruction {
                 };
 
                 let res = match high5 {
+                    0x00 => Ok(Instruction::RotateLeftCarry { loc }),
+                    0x10 => Ok(Instruction::RotateLeft { loc }),
                     0x40 => Ok(Instruction::CheckBit { bit: 0, loc }),
                     0x48 => Ok(Instruction::CheckBit { bit: 1, loc }),
                     0x50 => Ok(Instruction::CheckBit { bit: 2, loc }),
@@ -291,9 +366,15 @@ impl fmt::Display for Instruction {
             Load16 { dst, src } => write!(f, "LD {},{}", dst, src),
             XOR { dst, src } => write!(f, "XOR {},{}", dst, src),
             Inc8 { loc } => write!(f, "INC {}", loc),
+            Inc16 { loc } => write!(f, "INC {}", loc),
+            Dec8 { loc } => write!(f, "DEC {}", loc),
             CheckBit { bit, loc } => write!(f, "BIT {},{}", bit, loc),
+            RotateLeftCarry { loc } => write!(f, "RLC {}", loc),
+            RotateLeft { loc } => write!(f, "RL {}", loc),
             JR { cond, offset } => write!(f, "JR {}${:02x}", cond, offset),
             Call { cond, addr } => write!(f, "CALL {}${:04x}", cond, addr),
+            Push { loc } => write!(f, "PUSH {}", loc),
+            Pop { loc } => write!(f, "POP {}", loc),
         }
     }
 }

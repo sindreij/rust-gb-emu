@@ -192,7 +192,18 @@ impl Cpu {
             }
             Inc8 { loc } => {
                 let val = self.get_loc8(loc, mmu)?;
-                self.set_loc8(loc, mmu, val + 1)?;
+                self.set_loc8(loc, mmu, val.wrapping_add(1))?;
+            }
+            Inc16 { loc } => {
+                let val = self.get_loc16(loc);
+                self.set_loc16(loc, val.wrapping_add(1));
+            }
+            Dec8 { loc } => {
+                let val = self.get_loc8(loc, mmu)?;
+                self.set_loc8(loc, mmu, val.wrapping_sub(1))?;
+                self.flags.zero = val == 0;
+                self.flags.subtract = true;
+                self.flags.half_carry = val & 0xff == 0xff;
             }
             XOR { src, dst } => {
                 let srcval = self.get_loc8(src, mmu)?;
@@ -203,6 +214,30 @@ impl Cpu {
             CheckBit { bit, loc } => {
                 let mask = 1 << bit;
                 self.flags.zero = self.get_loc8(loc, mmu)? & mask == 0;
+                self.flags.subtract = false;
+                self.flags.half_carry = true;
+            }
+            RotateLeftCarry { loc } => {
+                let val = self.get_loc8(loc, mmu)?;
+                let val = val.rotate_left(1);
+                self.set_loc8(loc, mmu, val)?;
+                self.flags.zero = val == 0;
+                self.flags.carry = val & 1 == 1;
+                self.flags.subtract = false;
+                self.flags.half_carry = false;
+            }
+            RotateLeft { loc } => {
+                let val = self.get_loc8(loc, mmu)?;
+                let val = val.rotate_left(1);
+                // carry is set to the bit that was moved to the start
+                let new_carry = val & 1 == 1;
+                // the rightmost bit is set to the old carry
+                let val = val | (self.flags.carry as u8);
+                self.set_loc8(loc, mmu, val)?;
+                self.flags.zero = val == 0;
+                self.flags.carry = new_carry;
+                self.flags.subtract = false;
+                self.flags.half_carry = false;
             }
             JR { cond, offset } => {
                 if self.check_cond(cond) {
@@ -215,6 +250,16 @@ impl Cpu {
                     self.sp -= 2;
                     self.pc = addr;
                 }
+            }
+            Push { loc } => {
+                let value = self.get_loc16(loc);
+                mmu.write_u16(self.sp - 1, value)?;
+                self.sp -= 2;
+            }
+            Pop { loc } => {
+                self.sp += 2;
+                let value = mmu.read_u16(self.sp - 1)?;
+                self.set_loc16(loc, value);
             }
         }
 
