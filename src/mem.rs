@@ -1,18 +1,19 @@
 use std::fs::File;
 use std::io::prelude::*;
 
-use crate::error::Error;
+use crate::{error::Error, ppu::Ppu};
 
 pub struct Mmu {
     mem: Vec<u8>,
+    pub ppu: Ppu,
 }
 
 impl Mmu {
-    pub fn empty() -> Mmu {
+    pub fn empty(ppu: Ppu) -> Mmu {
         let mut mem = vec![0; 65535];
         // Simulate always beeing in vblank :)
         mem[0xff44] = 0x90;
-        Mmu { mem }
+        Mmu { mem, ppu }
     }
 
     pub fn load_game_rom(&mut self, rom_file: &str) -> Result<(), Error> {

@@ -1,19 +1,23 @@
 mod cpu;
 mod debugger;
+mod display;
 mod error;
 mod instructions;
 mod mem;
+mod ppu;
 
 use std::error::Error;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use parking_lot::Mutex;
 use structopt::StructOpt;
 
 use cpu::Cpu;
 use debugger::Debugger;
 use instructions::Instruction;
 use mem::Mmu;
+use ppu::Ppu;
 
 /// A basic example
 #[derive(StructOpt, Debug)]
@@ -44,7 +48,9 @@ fn main_() -> Result<(), Box<Error>> {
 }
 
 fn debug(rom_file: &str) -> Result<(), Box<Error>> {
-    let mut mmu = Mmu::empty();
+    let (display_thread, display) = display::start_thread();
+    let ppu = Ppu::new(display);
+    let mut mmu = Mmu::empty(ppu);
     mmu.load_game_rom(rom_file)?;
     mmu.load_boot_rom()?;
     let cpu = Cpu::default();
@@ -55,7 +61,10 @@ fn debug(rom_file: &str) -> Result<(), Box<Error>> {
 }
 
 fn run(rom_file: &str) -> Result<(), Box<Error>> {
-    let mut mmu = Mmu::empty();
+    let (display_thread, display) = display::start_thread();
+
+    let mut ppu = Ppu::new(display);
+    let mut mmu = Mmu::empty(ppu);
     mmu.load_game_rom(rom_file)?;
     mmu.load_boot_rom()?;
     let mut cpu = Cpu::default();
@@ -68,6 +77,8 @@ fn run(rom_file: &str) -> Result<(), Box<Error>> {
         println!("Registers:\n{}", cpu);
         mmu.dump_to_file("memdump.hex")?;
     }
+
+    display_thread.join().unwrap();
 
     Ok(())
 }
@@ -84,6 +95,7 @@ fn game_loop(cpu: &mut Cpu, mmu: &mut Mmu) -> Result<(), Box<Error>> {
     loop {
         cpu.print_next(mmu)?;
         cpu.step(mmu)?;
+        mmu.ppu.step();
 
         if interrupt.load(Ordering::Relaxed) {
             return Err(crate::error::Error::Abort("Interrupt").into());
@@ -92,7 +104,9 @@ fn game_loop(cpu: &mut Cpu, mmu: &mut Mmu) -> Result<(), Box<Error>> {
 }
 
 fn disassemble_bootrom() -> Result<(), Box<Error>> {
-    let mut mmu = Mmu::empty();
+    // Will never run ppu
+    let mut ppu = Ppu::new(Arc::new(Mutex::new(vec![])));
+    let mut mmu = Mmu::empty(ppu);
     mmu.load_boot_rom()?;
     let mmu = mmu;
 
