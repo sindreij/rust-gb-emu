@@ -80,7 +80,7 @@ impl Debugger {
                 Ok(line) => {
                     let line = if line == "" { last } else { line };
 
-                    rl.add_history_entry(line.as_ref());
+                    rl.add_history_entry(&line);
 
                     let args: Vec<_> = line.split(" ").collect();
                     if let Err(err) = self.run_command(&args) {
